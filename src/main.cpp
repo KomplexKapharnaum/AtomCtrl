@@ -5,12 +5,11 @@
 #include <BleKeyboard.h>
 #include <FastLED.h>
 
-BleKeyboard bleKeyboard("Buzzer");
+BleKeyboard bleKeyboard("DMV-key");
 
-const int NLEDS = 25;
+const int NLEDS = 1;
 CRGB leds[NLEDS];
 
-const int buzzerPIN = 32;
 const int onboardPIN = 39;
 const int onboardLED = 27;
 
@@ -27,15 +26,13 @@ void setup()
   Serial.begin(115200);
   Serial.println("Starting BLE!");
   bleKeyboard.begin();
-  pinMode(buzzerPIN, INPUT_PULLUP);
   pinMode(onboardPIN, INPUT);
-
   FastLED.addLeds<WS2812, onboardLED, GRB>(leds, NLEDS);
-  FastLED.setBrightness(100);
+  FastLED.setBrightness(2);
 }
 
 void loop() 
-{
+{DD  
 
   if(bleKeyboard.isConnected())
   {
@@ -47,26 +44,23 @@ void loop()
       Serial.println("Connected !");
     }
 
-    if (digitalRead(buzzerPIN) == LOW) 
-    {
-      setLeds(CRGB::Yellow);
-      Serial.println("BUZZ!");
-      bleKeyboard.press(KEY_LEFT_CTRL);
-      delay(100);
-      bleKeyboard.releaseAll();
-      delay(200);
-    }
-
     if (digitalRead(onboardPIN) == LOW)
     {
       setLeds(CRGB::Yellow);
       Serial.println("BTN!");
-      bleKeyboard.println("ok");
+      bleKeyboard.print("D");
       delay(300);
+
+      // setLeds(CRGB::Yellow);
+      // Serial.println("BUZZ!");
+      // bleKeyboard.press(KEY_LEFT_CTRL);
+      // delay(100);
+      // bleKeyboard.releaseAll();
+      // delay(200);
     }
 
   }
-  else 
+  else
   {
     Serial.println("Not connected.. ");
     connected = false;
