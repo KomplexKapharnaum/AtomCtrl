@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+
+import paho.mqtt.client as mqtt
+
+import rtmidi
+from rtmidi.midiconstants import NOTE_OFF, NOTE_ON, PROGRAM_CHANGE, CONTROL_CHANGE
+
+from pythonosc import udp_client
+from pythonosc import dispatcher
+from pythonosc import osc_server
+import socket, time
+
+MIDI_CHANNEL = 14
+NOTE_GO = 60
+
+# The callback for when the client receives a CONNACK response from the server.
+def on_connect(cli, userdata, flags, rc):
+    print("MQTT: connected to broker")
+
+    # Subscribing in on_connect() means that if we lose the connection and
+    # reconnect then subscriptions will be renewed.
+    cli.subscribe("atom/#")
+
+# The callback for when a PUBLISH message is received from the server.
+def on_message(client, userdata, msg):
+    
+    # MIDI 
+    if msg.topic == 'atom/go':
+        print('----\nMQTT recv: atom/go')
+        action_go()    
+    
+ # OSC /go
+def go(*args):
+    print('----\nOSC recv: /go')
+    action_go()
+    
+    
+# OSC ping callback
+def ping(path, ip):
+    # print('OSC recv: /ping', path, ip)
+    oscpath = "/pong"
+    oscmsg = get_ip()
+    oscresponder = udp_client.SimpleUDPClient(ip, 3335)
+    oscresponder.send_message(oscpath, oscmsg)
+    print('---\nOSC send:', oscpath, oscmsg, 'to', ip, ':3335')
+
+# My Local IP
+def get_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(0)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
+
+
+# RELAY GO
+def action_go():
+    # OSC
+    # oscmax.send_message("/go", "")
+    # print('OSC send:', "/go", 'to', "127.0.0.1", ':3333')
+    
+    # MIDI
+    print('MIDI send: ch=', MIDI_CHANNEL, 'note=', NOTE_GO)
+    midiout.note_on(NOTE_GO)
+    time.sleep(0.1)
+    midiout.note_off(NOTE_GO)
+    
+
+print("\n\n.:: DMV - Bridge MQTT -> OSC ::.")
+print("\nThis script relay MQTT message max/# to /# in OSC on localhost:3333\n")
+
+
+oscmax = udp_client.SimpleUDPClient("127.0.0.1", 3333)
+
+dispatcher = dispatcher.Dispatcher()
+dispatcher.map("/ping", ping)
+dispatcher.map("/go", go)
+oscserver = osc_server.ThreadingOSCUDPServer(("0.0.0.0", 3334), dispatcher)
+
+mqttclient = mqtt.Client()
+mqttclient.on_connect = on_connect
+mqttclient.on_message = on_message
+
+try:
+    mqttclient.connect("localhost", 1883, 60)
+except:
+    print("MQTT: can't connect to localhost..")
+    print("\tCheck if Mosquitto is running and retry...\n")
+
+# START MIDI OUT
+class MidiOutWrapper:
+    def __init__(self, midi, ch=1):
+        self.channel = ch
+        self._midi = midi
+
+    def channel_message(self, command, *data, ch=None):
+        """Send a MIDI channel mode message."""
+        command = (command & 0xf0) | ((ch if ch else self.channel) - 1 & 0xf)
+        msg = [command] + [value & 0x7f for value in data]
+        self._midi.send_message(msg)
+    
+    def note_off(self, note, velocity=0, ch=None):
+        """Send a 'Note Off' message."""
+        self.channel_message(NOTE_OFF, note, velocity, ch=ch)
+
+    def note_on(self, note, velocity=127, ch=None):
+        """Send a 'Note On' message."""
+        self.channel_message(NOTE_ON, note, velocity, ch=ch)
+
+    def pc(self, program, ch=None):
+        """Send a 'Program Change' message."""
+        self.channel_message(PROGRAM_CHANGE, program, ch=ch)
+        
+    def cc(self, control, value, ch=None):
+        """Send a 'Program Change' message."""
+        self.channel_message(CONTROL_CHANGE, control, value, ch=ch)
+        
+        
+midiout = rtmidi.MidiOut()
+midiout.open_virtual_port("AtomCtrl")
+midiout = MidiOutWrapper(midiout, MIDI_CHANNEL)
+
+    
+# RUN MQTT
+mqttclient.loop_start()
+
+
+# RUN OSC
+print("OSC: listening on", 3334)
+oscserver.serve_forever()
+
+
+# EXIT
+mqttclient.loop_stop()
+
