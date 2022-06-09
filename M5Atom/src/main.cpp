@@ -5,10 +5,8 @@
 
 
 // WiFi stuff
-// const char* ssid = "dmv-wifi";          // Wifi SSID
-// const char* pwd = "dmvdmvdmv";          // Wifi Password
-const char* ssid = "interweb";          // Wifi SSID
-const char* pwd = "superspeed37";          // Wifi Password
+const char* ssid = "dmv-wifi";          // Wifi SSID
+const char* pwd = "dmvdmvdmv";          // Wifi Password
 
 // MQTT stuff
 IPAddress mqttbroker(0,0,0,0);          // Specify Mosquitto broker IP - will be update if "/broker" OSC message is received 
@@ -47,13 +45,6 @@ void mqttConnect() {
   }
 }
 
-// CONNECT WIFI
-void wifiConnect() {
-  if (!wifiConnected) {
-    WiFi.begin(ssid, pwd);
-  }
-}
-
 // OSC BEACON
 void oscPing() {
   if (wifiConnected && !mqttConnected) {
@@ -70,10 +61,11 @@ void onWifiConnected(WiFiEvent_t event, WiFiEventInfo_t info)
     Serial.println("WIFI: Connected !");
     Serial.print("My IP is ");
     Serial.println(WiFi.localIP());
+    Serial.print("Subnet MASK is ");
+    Serial.println(WiFi.subnetMask());
 
     // prepare OSC
-    oscserver = WiFi.localIP();
-    oscserver[3] = 255;
+    oscserver = ~WiFi.subnetMask() | WiFi.gatewayIP();
     Serial.print("OSC Broadcast to ");
     Serial.println(oscserver.toString());
 
@@ -130,7 +122,7 @@ void setup()
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onDisconnect(onMqttDisconnect);
   
-  wifiConnect();
+  WiFi.begin(ssid, pwd);
 
   oscPingTimer = xTimerCreate("pingTimer", pdMS_TO_TICKS(2000), pdTRUE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(oscPing));
   xTimerStart(oscPingTimer, 0);
